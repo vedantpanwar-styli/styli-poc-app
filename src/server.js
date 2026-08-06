@@ -20,6 +20,12 @@ app.get('/health', (_req, res) => {
 
 app.get('/ready', (_req, res) => res.json({ ready: true }));
 
+// Returns the digest-independent identity of this build. Every environment
+// running the same image must return the same values here.
+app.get('/identity', (_req, res) => {
+  res.json({ version: config.version, commit: config.commitSha });
+});
+
 app.listen(config.port, () => {
   console.log(JSON.stringify({
     level: 'info', msg: 'listening',
