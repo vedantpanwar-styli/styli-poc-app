@@ -1,0 +1,100 @@
+# Runs on merge to the production branch.
+# NOT WIRED YET - no production project exists, so no trigger is created.
+#
+# Copies the image qa approved into the production registry under a new tag.
+# Nothing is built here.
+
+steps:
+
+  # the digest in envs/qa is what qa actually tested, regardless of how long
+  # testing took or how many commits landed since
+  - id: 'read-qa-digest'
+    name: 'gcr.io/cloud-builders/git'
+    secretEnv: ['GITHUB_TOKEN']
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gitops
+        apk add --no-cache yq >/dev/null 2>&1 || true
+
+        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/qa/values.yaml)
+        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/qa/values.yaml)
+
+        [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ] || { echo "no digest in envs/qa"; exit 1; }
+
+        echo "$DIGEST"   > /workspace/DIGEST
+        echo "$SRC_REPO" > /workspace/SRC_REPO
+        echo "qa digest: $DIGEST"
+
+  - id: 'prod-version'
+    name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        VERSION="v$(date +%y).$(date +%-m).0"
+        echo "$VERSION" > /workspace/PROD_VERSION
+        echo "version: $VERSION"
+
+  - id: 'copy-to-prod-registry'
+    name: 'gcr.io/go-containerregistry/crane:debug'
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        DIGEST=$(cat /workspace/DIGEST)
+        SRC_REPO=$(cat /workspace/SRC_REPO)
+        VERSION=$(cat /workspace/PROD_VERSION)
+
+        crane copy "$SRC_REPO@$DIGEST" "${_PROD_REGISTRY}/${_SERVICE}:$VERSION"
+
+        # copy must not change the digest
+        AFTER=$(crane digest "${_PROD_REGISTRY}/${_SERVICE}:$VERSION")
+        if [ "$DIGEST" != "$AFTER" ]; then
+          echo "digest changed during copy: $DIGEST -> $AFTER"
+          exit 1
+        fi
+        echo "copied, digest unchanged: $AFTER"
+
+  - id: 'update-gitops-prod'
+    name: 'gcr.io/cloud-builders/git'
+    secretEnv: ['GITHUB_TOKEN']
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        DIGEST=$(cat /workspace/DIGEST)
+        VERSION=$(cat /workspace/PROD_VERSION)
+
+        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gp
+        cd /tmp/gp
+        apk add --no-cache yq >/dev/null 2>&1 || true
+
+        yq -i ".image.repository = \"${_PROD_REGISTRY}/${_SERVICE}\" |
+               .image.tag        = \"$VERSION\" |
+               .image.digest     = \"$DIGEST\"" envs/prod/values.yaml
+
+        git config user.name  "cloud-build"
+        git config user.email "cloud-build@poc.local"
+        git commit -am "release(prod): poc-service $VERSION"
+        git push origin main
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/github-token/versions/latest
+      env: GITHUB_TOKEN
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _SERVICE: 'poc-service'
+  _PROD_REGISTRY: 'asia-south1-docker.pkg.dev/REPLACE-WITH-PROD-PROJECT/styli'
+  _GITHUB_OWNER: 'vedantpanwar-styli'
+  _GITOPS_REPO: 'styli-poc-gitops'
+
+timeout: 900s
