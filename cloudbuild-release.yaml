@@ -85,6 +85,9 @@ steps:
         rm -rf /workspace/gitops
         git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /workspace/gitops
 
+        # the yq image runs as uid 1000 and cannot write files git cloned as root
+        chmod -R a+rwX /workspace/gitops
+
   - id: 'set-lower-digests'
     name: 'mikefarah/yq:4'
     entrypoint: sh
