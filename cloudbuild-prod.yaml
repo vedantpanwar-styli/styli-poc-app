@@ -26,11 +26,11 @@ steps:
         DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
         SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
 
-        [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ] || { echo "no digest in envs/uat"; exit 1; }
+        [ -n "$$DIGEST" ] && [ "$$DIGEST" != "null" ] || { echo "no digest in envs/uat"; exit 1; }
 
-        echo "$DIGEST"   > /workspace/DIGEST
-        echo "$SRC_REPO" > /workspace/SRC_REPO
-        echo "uat digest: $DIGEST"
+        echo "$$DIGEST"   > /workspace/DIGEST
+        echo "$$SRC_REPO" > /workspace/SRC_REPO
+        echo "uat digest: $$DIGEST"
 
   - id: 'prod-version'
     name: 'gcr.io/cloud-builders/gcloud'
@@ -39,8 +39,8 @@ steps:
       - -c
       - |
         VERSION="v$(date +%y).$(date +%-m).0"
-        echo "$VERSION" > /workspace/PROD_VERSION
-        echo "version: $VERSION"
+        echo "$$VERSION" > /workspace/PROD_VERSION
+        echo "version: $$VERSION"
 
   - id: 'copy-to-prod-registry'
     name: 'gcr.io/go-containerregistry/gcrane:debug'
@@ -53,15 +53,15 @@ steps:
         SRC_REPO=$(cat /workspace/SRC_REPO)
         VERSION=$(cat /workspace/PROD_VERSION)
 
-        gcrane copy "$SRC_REPO@$DIGEST" "${_PROD_REGISTRY}/${_SERVICE}:$VERSION"
+        gcrane copy "$$SRC_REPO@$$DIGEST" "${_PROD_REGISTRY}/${_SERVICE}:$$VERSION"
 
         # copy must not change the digest
-        AFTER=$(gcrane digest "${_PROD_REGISTRY}/${_SERVICE}:$VERSION")
-        if [ "$DIGEST" != "$AFTER" ]; then
-          echo "digest changed during copy: $DIGEST -> $AFTER"
+        AFTER=$(gcrane digest "${_PROD_REGISTRY}/${_SERVICE}:$$VERSION")
+        if [ "$$DIGEST" != "$$AFTER" ]; then
+          echo "digest changed during copy: $$DIGEST -> $$AFTER"
           exit 1
         fi
-        echo "copied, digest unchanged: $AFTER"
+        echo "copied, digest unchanged: $$AFTER"
 
   - id: 'update-gitops-prod'
     name: 'gcr.io/cloud-builders/git'
@@ -79,12 +79,12 @@ steps:
         apk add --no-cache yq >/dev/null 2>&1 || true
 
         yq -i ".image.repository = \"${_PROD_REGISTRY}/${_SERVICE}\" |
-               .image.tag        = \"$VERSION\" |
-               .image.digest     = \"$DIGEST\"" envs/prod/apps/${_SERVICE}.yaml
+               .image.tag        = \"$$VERSION\" |
+               .image.digest     = \"$$DIGEST\"" envs/prod/apps/${_SERVICE}.yaml
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
-        git commit -am "release(prod): poc-service $VERSION"
+        git commit -am "release(prod): poc-service $$VERSION"
         git push origin main
 
 availableSecrets:

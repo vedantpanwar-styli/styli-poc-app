@@ -12,7 +12,7 @@ steps:
       - |
         # TODO: replace with release-please once conventional commits are enforced
         SHORT=$(echo "$COMMIT_SHA" | cut -c1-7)
-        echo "1.0.0-rc.$SHORT" > /workspace/VERSION
+        echo "1.0.0-rc.$$SHORT" > /workspace/VERSION
         cat /workspace/VERSION
 
   - id: 'unit-tests'
@@ -39,7 +39,7 @@ steps:
       - |
         VERSION=$(cat /workspace/VERSION)
         docker build \
-          --build-arg VERSION="$VERSION" \
+          --build-arg VERSION="$$VERSION" \
           --build-arg COMMIT_SHA="$COMMIT_SHA" \
           -t candidate:local .
 
@@ -59,15 +59,15 @@ steps:
         VERSION=$(cat /workspace/VERSION)
         IMG="${_LOWER_REGISTRY}/${_SERVICE}"
 
-        docker tag candidate:local "$IMG:$VERSION"
-        docker push "$IMG:$VERSION"
+        docker tag candidate:local "$$IMG:$$VERSION"
+        docker push "$$IMG:$$VERSION"
 
         # the digest is what gets deployed and later promoted
-        DIGEST=$(gcloud artifacts docker images describe "$IMG:$VERSION" \
+        DIGEST=$(gcloud artifacts docker images describe "$$IMG:$$VERSION" \
                  --format='value(image_summary.digest)')
-        echo "$DIGEST" > /workspace/DIGEST
-        echo "pushed $IMG:$VERSION"
-        echo "digest $DIGEST"
+        echo "$$DIGEST" > /workspace/DIGEST
+        echo "pushed $$IMG:$$VERSION"
+        echo "digest $$DIGEST"
 
   - id: 'update-gitops'
     name: 'gcr.io/cloud-builders/git'
@@ -87,14 +87,14 @@ steps:
         # all three lower environments get the same digest
         for ENV in dev qa uat; do
           yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
-                 .image.tag        = \"$VERSION\" |
-                 .image.digest     = \"$DIGEST\"" "envs/$ENV/apps/${_SERVICE}.yaml"
+                 .image.tag        = \"$$VERSION\" |
+                 .image.digest     = \"$$DIGEST\"" "envs/$$ENV/apps/${_SERVICE}.yaml"
         done
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
         git add envs/dev/apps/${_SERVICE}.yaml envs/qa/apps/${_SERVICE}.yaml envs/uat/apps/${_SERVICE}.yaml
-        git commit -m "chore(lower): poc-service $VERSION"
+        git commit -m "chore(lower): poc-service $$VERSION"
         git push origin main
 
 availableSecrets:
