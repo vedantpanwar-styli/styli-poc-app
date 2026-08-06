@@ -1,6 +1,6 @@
 # Runs on merge to the release branch.
 # Builds the image once, pushes to the lower registry, and points
-# envs/dev and envs/qa at that digest in the gitops repo.
+# dev, qa and uat at that digest in the gitops repo.
 
 steps:
 
@@ -84,8 +84,8 @@ steps:
         cd /tmp/gitops
         apk add --no-cache yq >/dev/null 2>&1 || true
 
-        # dev and qa get the same digest
-        for ENV in dev qa; do
+        # all three lower environments get the same digest
+        for ENV in dev qa uat; do
           yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
                  .image.tag        = \"$VERSION\" |
                  .image.digest     = \"$DIGEST\"" "envs/$ENV/apps/${_SERVICE}.yaml"
@@ -93,7 +93,7 @@ steps:
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
-        git add envs/dev/apps/poc-service.yaml envs/qa/apps/poc-service.yaml
+        git add envs/dev/apps/${_SERVICE}.yaml envs/qa/apps/${_SERVICE}.yaml envs/uat/apps/${_SERVICE}.yaml
         git commit -m "chore(lower): poc-service $VERSION"
         git push origin main
 

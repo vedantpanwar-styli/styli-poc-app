@@ -1,14 +1,14 @@
 # Runs on merge to the production branch.
 # NOT WIRED YET - no production project exists, so no trigger is created.
 #
-# Copies the image qa approved into the production registry under a new tag.
+# Copies the image uat approved into the production registry under a new tag.
 # Nothing is built here.
 
 steps:
 
-  # the digest in envs/qa is what qa actually tested, regardless of how long
-  # testing took or how many commits landed since
-  - id: 'read-qa-digest'
+  # uat is the last gate before production, so envs/uat records what was actually
+  # signed off - regardless of how long testing took or what landed since
+  - id: 'read-uat-digest'
     name: 'gcr.io/cloud-builders/git'
     secretEnv: ['GITHUB_TOKEN']
     entrypoint: sh
@@ -19,14 +19,14 @@ steps:
         git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gitops
         apk add --no-cache yq >/dev/null 2>&1 || true
 
-        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/qa/apps/${_SERVICE}.yaml)
-        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/qa/apps/${_SERVICE}.yaml)
+        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
+        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
 
-        [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ] || { echo "no digest in envs/qa"; exit 1; }
+        [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ] || { echo "no digest in envs/uat"; exit 1; }
 
         echo "$DIGEST"   > /workspace/DIGEST
         echo "$SRC_REPO" > /workspace/SRC_REPO
-        echo "qa digest: $DIGEST"
+        echo "uat digest: $DIGEST"
 
   - id: 'prod-version'
     name: 'gcr.io/cloud-builders/gcloud'
