@@ -19,8 +19,8 @@ steps:
         git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gitops
         apk add --no-cache yq >/dev/null 2>&1 || true
 
-        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/qa/values.yaml)
-        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/qa/values.yaml)
+        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/qa/apps/${_SERVICE}.yaml)
+        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/qa/apps/${_SERVICE}.yaml)
 
         [ -n "$DIGEST" ] && [ "$DIGEST" != "null" ] || { echo "no digest in envs/qa"; exit 1; }
 
@@ -76,7 +76,7 @@ steps:
 
         yq -i ".image.repository = \"${_PROD_REGISTRY}/${_SERVICE}\" |
                .image.tag        = \"$VERSION\" |
-               .image.digest     = \"$DIGEST\"" envs/prod/values.yaml
+               .image.digest     = \"$DIGEST\"" envs/prod/apps/${_SERVICE}.yaml
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"

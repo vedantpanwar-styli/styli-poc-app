@@ -88,12 +88,12 @@ steps:
         for ENV in dev qa; do
           yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
                  .image.tag        = \"$VERSION\" |
-                 .image.digest     = \"$DIGEST\"" "envs/$ENV/values.yaml"
+                 .image.digest     = \"$DIGEST\"" "envs/$ENV/apps/${_SERVICE}.yaml"
         done
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
-        git add envs/dev/values.yaml envs/qa/values.yaml
+        git add envs/dev/apps/poc-service.yaml envs/qa/apps/poc-service.yaml
         git commit -m "chore(lower): poc-service $VERSION"
         git push origin main
 
