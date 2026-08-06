@@ -24,7 +24,9 @@ steps:
         rm -rf /workspace/gitops
         git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /workspace/gitops
 
-        # the yq image runs as uid 1000 and cannot write files git cloned as root
+        # the yq image runs as uid 1000; git clones as root and /workspace
+        # itself is root owned, so both need to be writable
+        chmod a+rwX /workspace
         chmod -R a+rwX /workspace/gitops
 
   # uat is the last gate before production, so envs/uat records what was actually
