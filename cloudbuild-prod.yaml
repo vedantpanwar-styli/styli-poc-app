@@ -7,12 +7,13 @@
 # The copy is a manifest transfer, so the digest survives the move between
 # projects untouched - that is what lets the same artifact reach production
 # without a rebuild. Only _PROD_REGISTRY below changes when that happens.
+#
+# Steps are split by tool: the git builder has no yq, and the yq image has
+# no git.
 
 steps:
 
-  # uat is the last gate before production, so envs/uat records what was actually
-  # signed off - regardless of how long testing took or what landed since
-  - id: 'read-uat-digest'
+  - id: 'clone-gitops'
     name: 'gcr.io/cloud-builders/git'
     secretEnv: ['GITHUB_TOKEN']
     entrypoint: sh
@@ -20,11 +21,22 @@ steps:
       - -c
       - |
         set -e
-        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gitops
-        apk add --no-cache yq >/dev/null 2>&1 || true
+        rm -rf /workspace/gitops
+        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /workspace/gitops
 
-        DIGEST=$(yq -r '.image.digest' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
-        SRC_REPO=$(yq -r '.image.repository' /tmp/gitops/envs/uat/apps/${_SERVICE}.yaml)
+  # uat is the last gate before production, so envs/uat records what was actually
+  # signed off - regardless of how long testing took or what landed since
+  - id: 'read-uat-digest'
+    name: 'mikefarah/yq:4'
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        F=/workspace/gitops/envs/uat/apps/${_SERVICE}.yaml
+
+        DIGEST=$(yq -r '.image.digest' "$$F")
+        SRC_REPO=$(yq -r '.image.repository' "$$F")
 
         [ -n "$$DIGEST" ] && [ "$$DIGEST" != "null" ] || { echo "no digest in envs/uat"; exit 1; }
 
@@ -63,9 +75,8 @@ steps:
         fi
         echo "copied, digest unchanged: $$AFTER"
 
-  - id: 'update-gitops-prod'
-    name: 'gcr.io/cloud-builders/git'
-    secretEnv: ['GITHUB_TOKEN']
+  - id: 'set-prod-digest'
+    name: 'mikefarah/yq:4'
     entrypoint: sh
     args:
       - -c
@@ -74,17 +85,29 @@ steps:
         DIGEST=$(cat /workspace/DIGEST)
         VERSION=$(cat /workspace/PROD_VERSION)
 
-        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gp
-        cd /tmp/gp
-        apk add --no-cache yq >/dev/null 2>&1 || true
-
         yq -i ".image.repository = \"${_PROD_REGISTRY}/${_SERVICE}\" |
                .image.tag        = \"$$VERSION\" |
-               .image.digest     = \"$$DIGEST\"" envs/prod/apps/${_SERVICE}.yaml
+               .image.digest     = \"$$DIGEST\"" \
+          "/workspace/gitops/envs/prod/apps/${_SERVICE}.yaml"
+
+  - id: 'push-gitops'
+    name: 'gcr.io/cloud-builders/git'
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        VERSION=$(cat /workspace/PROD_VERSION)
+        cd /workspace/gitops
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
-        git commit -am "release(prod): poc-service $$VERSION"
+        git add envs/prod/apps/${_SERVICE}.yaml
+
+        # promoting the same digest again is a no-op, not a failure
+        git diff --cached --quiet && { echo "no change"; exit 0; }
+
+        git commit -m "release(prod): poc-service $$VERSION"
         git push origin main
 
 availableSecrets:
