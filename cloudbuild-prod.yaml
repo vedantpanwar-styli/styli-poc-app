@@ -85,7 +85,7 @@ steps:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/$PROJECT_ID/secrets/github-token/versions/latest
+    - versionName: projects/$PROJECT_ID/secrets/cloudbuild-github-token/versions/latest
       env: GITHUB_TOKEN
 
 options:
