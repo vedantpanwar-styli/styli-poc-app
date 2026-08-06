@@ -59,19 +59,34 @@ steps:
         VERSION=$(cat /workspace/VERSION)
         IMG="${_LOWER_REGISTRY}/${_SERVICE}"
 
+        set -e
         docker tag candidate:local "$$IMG:$$VERSION"
         docker push "$$IMG:$$VERSION"
 
-        # the digest is what gets deployed and later promoted
-        DIGEST=$(gcloud artifacts docker images describe "$$IMG:$$VERSION" \
-                 --format='value(image_summary.digest)')
+        # the digest is what gets deployed and later promoted. docker records
+        # it after the push; this image has no gcloud to ask the registry.
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$$IMG:$$VERSION" | cut -d@ -f2)
+        [ -n "$$DIGEST" ] || { echo "could not determine pushed digest"; exit 1; }
+
         echo "$$DIGEST" > /workspace/DIGEST
         echo "pushed $$IMG:$$VERSION"
         echo "digest $$DIGEST"
 
-  - id: 'update-gitops'
+  # The gitops update is split by tool: the git builder has no yq, and the yq
+  # image has no git.
+  - id: 'clone-gitops'
     name: 'gcr.io/cloud-builders/git'
     secretEnv: ['GITHUB_TOKEN']
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        rm -rf /workspace/gitops
+        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /workspace/gitops
+
+  - id: 'set-lower-digests'
+    name: 'mikefarah/yq:4'
     entrypoint: sh
     args:
       - -c
@@ -80,20 +95,31 @@ steps:
         VERSION=$(cat /workspace/VERSION)
         DIGEST=$(cat /workspace/DIGEST)
 
-        git clone -q "https://x-access-token:$$GITHUB_TOKEN@github.com/${_GITHUB_OWNER}/${_GITOPS_REPO}.git" /tmp/gitops
-        cd /tmp/gitops
-        apk add --no-cache yq >/dev/null 2>&1 || true
-
         # all three lower environments get the same digest
         for ENV in dev qa uat; do
           yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
                  .image.tag        = \"$$VERSION\" |
-                 .image.digest     = \"$$DIGEST\"" "envs/$$ENV/apps/${_SERVICE}.yaml"
+                 .image.digest     = \"$$DIGEST\"" \
+            "/workspace/gitops/envs/$$ENV/apps/${_SERVICE}.yaml"
         done
+
+  - id: 'push-gitops'
+    name: 'gcr.io/cloud-builders/git'
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        VERSION=$(cat /workspace/VERSION)
+        cd /workspace/gitops
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
         git add envs/dev/apps/${_SERVICE}.yaml envs/qa/apps/${_SERVICE}.yaml envs/uat/apps/${_SERVICE}.yaml
+
+        # a rebuild of the same commit produces the same digest and no diff
+        git diff --cached --quiet && { echo "no change"; exit 0; }
+
         git commit -m "chore(lower): poc-service $$VERSION"
         git push origin main
 
