@@ -1,8 +1,12 @@
 # Runs on merge to the production branch.
-# NOT WIRED YET - no production project exists, so no trigger is created.
 #
 # Copies the image uat approved into the production registry under a new tag.
 # Nothing is built here.
+#
+# Production will eventually live in its own GCP project with its own registry.
+# The copy is a manifest transfer, so the digest survives the move between
+# projects untouched - that is what lets the same artifact reach production
+# without a rebuild. Only _PROD_REGISTRY below changes when that happens.
 
 steps:
 
@@ -39,7 +43,7 @@ steps:
         echo "version: $VERSION"
 
   - id: 'copy-to-prod-registry'
-    name: 'gcr.io/go-containerregistry/crane:debug'
+    name: 'gcr.io/go-containerregistry/gcrane:debug'
     entrypoint: sh
     args:
       - -c
@@ -49,10 +53,10 @@ steps:
         SRC_REPO=$(cat /workspace/SRC_REPO)
         VERSION=$(cat /workspace/PROD_VERSION)
 
-        crane copy "$SRC_REPO@$DIGEST" "${_PROD_REGISTRY}/${_SERVICE}:$VERSION"
+        gcrane copy "$SRC_REPO@$DIGEST" "${_PROD_REGISTRY}/${_SERVICE}:$VERSION"
 
         # copy must not change the digest
-        AFTER=$(crane digest "${_PROD_REGISTRY}/${_SERVICE}:$VERSION")
+        AFTER=$(gcrane digest "${_PROD_REGISTRY}/${_SERVICE}:$VERSION")
         if [ "$DIGEST" != "$AFTER" ]; then
           echo "digest changed during copy: $DIGEST -> $AFTER"
           exit 1
@@ -93,7 +97,11 @@ options:
 
 substitutions:
   _SERVICE: 'poc-service'
-  _PROD_REGISTRY: 'asia-south1-docker.pkg.dev/REPLACE-WITH-PROD-PROJECT/styli'
+  # Currently in the lower project so the promotion path can be tested end to
+  # end. Moving production to its own project means changing the project id
+  # here and granting this build's service account artifactregistry.writer on
+  # the new repository - see infra/environments/cicd-demo/infrastructure/registry-iam.tf
+  _PROD_REGISTRY: 'asia-south1-docker.pkg.dev/elaborate-art-504407-a2/poc-prod'
   _GITHUB_OWNER: 'vedantpanwar-styli'
   _GITOPS_REPO: 'styli-poc-gitops'
 

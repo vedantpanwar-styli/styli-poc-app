@@ -108,7 +108,7 @@ options:
 
 substitutions:
   _SERVICE: 'poc-service'
-  _LOWER_REGISTRY: 'asia-south1-docker.pkg.dev/elaborate-art-504407-a2/styli'
+  _LOWER_REGISTRY: 'asia-south1-docker.pkg.dev/elaborate-art-504407-a2/poc-lower'
   _GITHUB_OWNER: 'vedantpanwar-styli'
   _GITOPS_REPO: 'styli-poc-gitops'
 
