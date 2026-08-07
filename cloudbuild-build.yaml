@@ -1,6 +1,11 @@
-# Runs on merge to the release branch.
-# Builds the image once, pushes to the lower registry, and points
-# dev, qa and uat at that digest in the gitops repo.
+# Runs on merge to the production branch.
+#
+# Builds the image once, pushes to the lower registry, and points dev, qa and
+# uat at that digest in the gitops repo.
+#
+# This is the only trigger that builds an image. Production does not get its
+# own build - it is promoted later by cloudbuild-promote.yaml, which copies
+# whatever digest uat signed off on.
 
 steps:
 

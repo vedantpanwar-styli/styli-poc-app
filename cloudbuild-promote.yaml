@@ -1,4 +1,8 @@
-# Runs on merge to the production branch.
+# Runs on a git tag matching promote/*, for example promote/v26.8.0.
+#
+# Pushing that tag is the qa sign-off. It is a separate act from merging to
+# production because sign-off happens days after the build, once uat has
+# actually been tested.
 #
 # Copies the image uat approved into the production registry under a new tag.
 # Nothing is built here.
@@ -55,7 +59,14 @@ steps:
     args:
       - -c
       - |
-        VERSION="v$(date +%y).$(date +%-m).0"
+        set -e
+        # the release is named by whoever signs off, not by the build date
+        TAG="$TAG_NAME"
+        VERSION="$${TAG#promote/}"
+
+        [ -n "$$VERSION" ] && [ "$$VERSION" != "$$TAG" ] || {
+          echo "tag must look like promote/<version>, got: $$TAG"; exit 1; }
+
         echo "$$VERSION" > /workspace/PROD_VERSION
         echo "version: $$VERSION"
 

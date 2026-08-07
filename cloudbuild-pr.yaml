@@ -1,5 +1,5 @@
-# Runs on pull requests targeting the release branch.
-# SonarQube only. Build and scans run on the release merge.
+# Runs on pull requests targeting the production branch.
+# SonarQube only. Build and scans run on the merge itself.
 
 steps:
 
