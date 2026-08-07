@@ -26,7 +26,7 @@ app.get('/identity', (_req, res) => {
   res.json({
     version: config.version,
     commit: config.commitSha,
-    promotedBy: 'tag',
+    promotedBy: 'tag-demo',
   });
 });
 
