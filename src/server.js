@@ -23,7 +23,11 @@ app.get('/ready', (_req, res) => res.json({ ready: true }));
 // Returns the digest-independent identity of this build. Every environment
 // running the same image must return the same values here.
 app.get('/identity', (_req, res) => {
-  res.json({ version: config.version, commit: config.commitSha });
+  res.json({
+    version: config.version,
+    commit: config.commitSha,
+    promotedBy: 'tag',
+  });
 });
 
 app.listen(config.port, () => {
