@@ -1,7 +1,10 @@
 # Runs on merge to the production branch.
 #
-# Builds the image once, pushes to the lower registry, and points dev, qa and
-# uat at that digest in the gitops repo.
+# Builds the image once, pushes to the lower registry, and points dev at that
+# digest in the gitops repo.
+#
+# dev only. qa and uat move when a human approves them - see
+# cloudbuild-promote-lower.yaml, whose trigger requires console approval.
 #
 # This is the only trigger that builds an image. Production does not get its
 # own build - it is promoted later by cloudbuild-promote.yaml, which copies
@@ -95,7 +98,7 @@ steps:
         chmod a+rwX /workspace
         chmod -R a+rwX /workspace/gitops
 
-  - id: 'set-lower-digests'
+  - id: 'set-dev-digest'
     name: 'mikefarah/yq:4'
     entrypoint: sh
     args:
@@ -105,13 +108,12 @@ steps:
         VERSION=$(cat /workspace/VERSION)
         DIGEST=$(cat /workspace/DIGEST)
 
-        # all three lower environments get the same digest
-        for ENV in dev qa uat; do
-          yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
-                 .image.tag        = \"$$VERSION\" |
-                 .image.digest     = \"$$DIGEST\"" \
-            "/workspace/gitops/envs/$$ENV/apps/${_SERVICE}.yaml"
-        done
+        # dev only. qa and uat are written by cloudbuild-promote-lower.yaml
+        # after approval, so a merge cannot disturb a running test session.
+        yq -i ".image.repository = \"${_LOWER_REGISTRY}/${_SERVICE}\" |
+               .image.tag        = \"$$VERSION\" |
+               .image.digest     = \"$$DIGEST\"" \
+          "/workspace/gitops/envs/dev/apps/${_SERVICE}.yaml"
 
   - id: 'push-gitops'
     name: 'gcr.io/cloud-builders/git'
@@ -125,12 +127,12 @@ steps:
 
         git config user.name  "cloud-build"
         git config user.email "cloud-build@poc.local"
-        git add envs/dev/apps/${_SERVICE}.yaml envs/qa/apps/${_SERVICE}.yaml envs/uat/apps/${_SERVICE}.yaml
+        git add envs/dev/apps/${_SERVICE}.yaml
 
         # a rebuild of the same commit produces the same digest and no diff
         git diff --cached --quiet && { echo "no change"; exit 0; }
 
-        git commit -m "chore(lower): poc-service $$VERSION"
+        git commit -m "chore(dev): poc-service $$VERSION"
         git push origin main
 
 availableSecrets:
